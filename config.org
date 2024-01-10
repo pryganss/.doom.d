@@ -1,0 +1,169 @@
+#+TITLE: Emacs Config
+
+#+begin_src emacs-lisp
+  ;; -*- lexical-binding: t -*-
+#+end_src
+
+* UI
+
+#+begin_src emacs-lisp
+
+(setq doom-theme 'doom-opera)
+(display-battery-mode 1)
+(display-time-mode 1)
+
+#+End_src
+
+* EXWM
+
+#+begin_src emacs-lisp
+
+(defun pry/run-in-background (command)
+  (let ((command-parts (split-string command "[ ]+")))
+    (apply #'call-process `(,(car command-parts) nil 0 nil ,@(cdr command-parts)))))
+
+(defun pry/exwm-init-hook ()
+  (pry/run-in-background "dunst")
+  (pry/run-in-background "nm-applet")
+  (pry/run-in-background "pasystray")
+  (pry/run-in-background "blueman-applet"))
+
+(defun pry/exwm-update-class ()
+  (exwm-workspace-rename-buffer exwm-class-name))
+
+(defun pry/update-displays ()
+  (interactive)
+  (pry/run-in-background "autorandr --change --force"))
+
+(use-package! exwm
+  :config
+  (setq exwm-workspace-number 2)
+  (setq exwm-workspace-show-all-buffers 1)
+  (setq exwm-layout-show-all-buffers 1)
+
+  (add-hook 'exwm-update-class-hook #'pry/exwm-update-class)
+  (add-hook 'exwm-init-hook #'pry/exwm-init-hook)
+
+  (require 'exwm-randr)
+  (setq exwm-randr-workspace-monitor-plist '(1 "eDP1" 0 "HDMI-1-0"))
+
+  (add-hook 'exwm-randr-screen-change-hook #'pry/update-displays)
+
+  (exwm-randr-enable)
+  (pry/update-displays)
+
+      (setq exwm-input-prefix-keys
+            '(?\C-x
+              ?\C-g
+              ?\M-x
+              ?\M-\ ))
+      (define-key exwm-mode-map [?\C-q] 'exwm-input-send-next-key)
+
+      (setq exwm-input-global-keys
+            `(([?\s-r] . exwm-reset)
+              ,@(mapcar (lambda (i)
+                          `(,(kbd (format "s-%d" i)) .
+                            (lambda ()
+                              (interactive)
+                              (exwm-workspace-switch-create ,i))))
+                        (number-sequence 0 9))))
+
+  (require 'exwm-systemtray)
+  (exwm-systemtray-enable)
+
+  (exwm-enable))
+
+(use-package! desktop-environment
+  :after exwm
+  :config
+  (desktop-environment-mode)
+  :custom
+  (desktop-environment-brightness-small-increment "2%+")
+  (desktop-environment-brightness-small-decrement "2%-")
+  (desktop-environment-brightness-normal-increment "5%+")
+  (desktop-environment-brightness-normal-decrement "5%-"))
+
+#+end_src
+
+* App Launcher
+
+#+begin_src emacs-lisp
+
+(map!
+ :leader
+ :desc "Launch Application" "l" #'app-launcher-run-app)
+
+#+end_src
+
+* Modeline Temperature
+
+#+begin_src emacs-lisp
+
+  (defvar modeline-temp "?℃"
+    "Current CPU temperature to be displayed in the modeline")
+
+  (defun modeline-temp-update ()
+    "Updates temperature in the modeline misc info"
+    (interactive)
+    (setq modeline-temp
+          (s-concat " "
+           (with-temp-buffer
+             (insert-file-contents "/sys/class/thermal/thermal_zone4/temp")
+             (s-chop-right 4 (buffer-substring-no-properties
+                              (point-min)
+                              (point-max)))) "℃")))
+
+  (define-minor-mode modeline-temp-mode
+    "Display CPU temperature in modeline."
+    :lighter " temp"
+    :global-prefix t
+    (if modeline-temp-mode
+        (progn
+          (add-to-list 'global-mode-string 'modeline-temp 'APPEND)
+          (add-hook 'display-time-hook 'modeline-temp-update))
+      ((remove-hook 'display-time-hook 'modeline-temp-update)
+       (delete 'modeline-temp mode-line-misc-info))))
+
+  (modeline-temp-mode 1)
+
+#+end_src
+
+* Winum
+
+#+begin_src emacs-lisp
+
+(after! winum
+  (winum-set-keymap-prefix (kbd "C-x o")))
+
+#+end_src
+
+* Evil
+
+#+begin_src emacs-lisp
+
+(after! evil
+ (evil-set-initial-state 'exwm-mode 'emacs))
+
+#+end_src
+
+* Consult
+
+#+begin_src emacs-lisp
+
+(after! consult
+  (setq consult-preview-key "M-."))
+
+#+end_src
+
+* Org Roam
+
+#+begin_src emacs-lisp
+
+(use-package! org-roam
+  :custom
+  (org-roam-capture-templates
+   '(("d" "default" plain "%?"
+     :if-new (file+head "${slug}.org" "#+title: ${title}\n#+date: %U\n")
+     :unnarrowed t))))
+
+#+end_src
